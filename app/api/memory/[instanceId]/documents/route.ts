@@ -8,11 +8,12 @@ import { getTierLimits } from '@/lib/memory/tiers'
 
 export const runtime = 'nodejs'
 
-let cachedPdfParse: ((data: Buffer | Uint8Array) => Promise<{ text: string }>) | null = null
-async function getPdfParser() {
+let cachedPdfParse: ((data: Buffer | Uint8Array) => Promise<{ text: string }>) | undefined
+async function getPdfParser(): Promise<(data: Buffer | Uint8Array) => Promise<{ text: string }>> {
   if (cachedPdfParse) return cachedPdfParse
   const mod = await import('pdf-parse')
-  cachedPdfParse = (mod as any).default ?? (mod as any)
+  const parse = (mod as any).default ?? (mod as any)
+  cachedPdfParse = parse as (data: Buffer | Uint8Array) => Promise<{ text: string }>
   return cachedPdfParse
 }
 
