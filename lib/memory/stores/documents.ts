@@ -164,11 +164,15 @@ export async function ragSearchByText(
 }
 
 export async function getTotalDocumentsMB(instanceId: string): Promise<number> {
-  const result = await prisma.$queryRawUnsafe<[{ total: string }]>(
-    `SELECT COALESCE(SUM(size_bytes), 0)::text as total FROM knowledge_documents WHERE instance_id = $1`,
-    instanceId
-  )
-  return parseInt(result[0]?.total ?? '0') / (1024 * 1024)
+  try {
+    const result = await (prisma as any).knowledgeDocument.aggregate({
+      where: { instanceId },
+      _sum: { sizeBytes: true },
+    })
+    return ((result._sum?.sizeBytes as number) ?? 0) / (1024 * 1024)
+  } catch {
+    return 0
+  }
 }
 
 export async function countDocuments(instanceId: string): Promise<number> {
