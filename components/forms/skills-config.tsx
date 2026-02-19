@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Search, Globe, Mic, Layout, Clock, ExternalLink } from 'lucide-react'
+import { Search, Globe, Mic, Layout, Clock, ExternalLink, Brain } from 'lucide-react'
 
 const skills = [
   {
@@ -47,6 +47,13 @@ const skills = [
     name: 'Scheduled Tasks',
     icon: Clock,
     description: 'Run tasks on a schedule'
+  },
+  {
+    key: 'memoryEnabled',
+    name: 'Memory & RAG',
+    icon: Brain,
+    description: 'Long-term memory, decision audit trail, and knowledge base search. Your agent remembers everything.',
+    badge: 'New'
   }
 ]
 
