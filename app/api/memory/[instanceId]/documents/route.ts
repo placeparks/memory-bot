@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { storeDocument, getDocuments, getTotalDocumentsMB } from '@/lib/memory/stores/documents'
 import { getOrCreateMemoryConfig } from '@/lib/memory'
 import { getTierLimits } from '@/lib/memory/tiers'
+import * as pdfParseImport from 'pdf-parse'
 
 export const runtime = 'nodejs'
 
@@ -62,17 +63,14 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
     try {
       const bytes = await file.arrayBuffer()
       const buffer = Buffer.from(bytes)
-      const uint8 = new Uint8Array(bytes)
-      const pdfParseMod = await new Function('return import("pdf-parse")')()
-      const parsePdf = (pdfParseMod?.default ?? pdfParseMod) as (b: Buffer) => Promise<{ text: string }>
+      const parsePdf = (pdfParseImport as any).default ?? (pdfParseImport as any)
       const parsed = await parsePdf(buffer)
       content = parsed.text
     } catch {
       try {
         const bytes = await file.arrayBuffer()
         const uint8 = new Uint8Array(bytes)
-        const pdfParseMod = await new Function('return import("pdf-parse")')()
-        const parsePdf = (pdfParseMod?.default ?? pdfParseMod) as (b: Uint8Array) => Promise<{ text: string }>
+        const parsePdf = (pdfParseImport as any).default ?? (pdfParseImport as any)
         const parsed = await parsePdf(uint8)
         content = parsed.text
       } catch (err: any) {
