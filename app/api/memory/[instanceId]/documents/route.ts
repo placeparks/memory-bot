@@ -63,8 +63,8 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
   } else if (name.endsWith('.pdf')) {
     try {
       // Dynamic import — only works if pdf-parse is installed
-      // @ts-ignore — optional dependency
-      const pdfParse = (await import('pdf-parse').catch(() => null)) as any
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const pdfParse = await new Function('return import("pdf-parse")')().catch(() => null)
       if (pdfParse?.default) {
         const parsed = await pdfParse.default(buffer)
         content = parsed.text
