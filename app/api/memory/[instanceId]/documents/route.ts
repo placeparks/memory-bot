@@ -62,12 +62,26 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
     try {
       const bytes = await file.arrayBuffer()
       const buffer = Buffer.from(bytes)
+      const uint8 = new Uint8Array(bytes)
       const pdfParseMod = await new Function('return import("pdf-parse")')()
       const parsePdf = (pdfParseMod?.default ?? pdfParseMod) as (b: Buffer) => Promise<{ text: string }>
       const parsed = await parsePdf(buffer)
       content = parsed.text
     } catch {
-      return NextResponse.json({ error: 'Failed to parse PDF' }, { status: 422 })
+      try {
+        const bytes = await file.arrayBuffer()
+        const uint8 = new Uint8Array(bytes)
+        const pdfParseMod = await new Function('return import("pdf-parse")')()
+        const parsePdf = (pdfParseMod?.default ?? pdfParseMod) as (b: Uint8Array) => Promise<{ text: string }>
+        const parsed = await parsePdf(uint8)
+        content = parsed.text
+      } catch (err: any) {
+        console.error('PDF parse failed', err)
+        return NextResponse.json(
+          { error: err?.message ? `Failed to parse PDF: ${err.message}` : 'Failed to parse PDF' },
+          { status: 422 }
+        )
+      }
     }
   } else {
     // Use file.text() — works reliably across all Node.js versions
@@ -75,7 +89,10 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
   }
 
   if (!content.trim()) {
-    return NextResponse.json({ error: 'Could not extract text from file' }, { status: 422 })
+    return NextResponse.json(
+      { error: 'Could not extract text from file. The PDF may be scanned or image-only.' },
+      { status: 422 }
+    )
   }
 
   const id = await storeDocument(instanceId, file.name, file.type || 'text/plain', content, file.size)
