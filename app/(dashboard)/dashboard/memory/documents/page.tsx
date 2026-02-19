@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Database, Upload, Trash2, FileText, Clock, CheckCircle, AlertCircle, Loader, Search } from 'lucide-react'
+import { Database, Upload, Trash2, FileText, Clock, CheckCircle, AlertCircle, Loader, Search, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface KnowledgeDocument {
@@ -44,6 +44,8 @@ export default function DocumentsPage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [applying, setApplying] = useState(false)
+  const [applyStatus, setApplyStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [instanceId, setInstanceId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
@@ -118,6 +120,20 @@ export default function DocumentsPage() {
     setSearching(false)
   }
 
+  async function handleApply() {
+    setApplying(true)
+    setApplyStatus('idle')
+    try {
+      const res = await fetch('/api/memory/apply', { method: 'POST' })
+      setApplyStatus(res.ok ? 'success' : 'error')
+    } catch {
+      setApplyStatus('error')
+    } finally {
+      setApplying(false)
+      setTimeout(() => setApplyStatus('idle'), 4000)
+    }
+  }
+
   const filtered = docs.filter(d => !search || d.filename.toLowerCase().includes(search.toLowerCase()))
 
   return (
@@ -152,6 +168,27 @@ export default function DocumentsPage() {
               <Upload className="w-3 h-3 mr-1" />
               {uploading ? 'Uploading...' : 'Upload Document'}
             </Button>
+            <Button
+              onClick={handleApply}
+              disabled={applying || docs.length === 0}
+              size="sm"
+              className={`text-xs border transition-all duration-300 ${
+                applyStatus === 'success'
+                  ? 'bg-green-500/20 border-green-500/40 text-green-400'
+                  : applyStatus === 'error'
+                  ? 'bg-red-500/20 border-red-500/40 text-red-400'
+                  : 'bg-red-600/20 hover:bg-red-600/30 text-red-400 border-red-500/30'
+              }`}
+            >
+              <Zap className="w-3 h-3 mr-1" />
+              {applying
+                ? 'Applying...'
+                : applyStatus === 'success'
+                ? 'Applied!'
+                : applyStatus === 'error'
+                ? 'Failed'
+                : 'Apply to Agent'}
+            </Button>
           </div>
         </div>
       </div>
@@ -161,6 +198,17 @@ export default function DocumentsPage() {
         {uploadError && (
           <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm text-red-400">
             {uploadError}
+          </div>
+        )}
+
+        {applyStatus === 'success' && (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 text-sm text-green-400">
+            Knowledge base applied — your agent now has access to the uploaded documents.
+          </div>
+        )}
+        {applyStatus === 'error' && (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm text-red-400">
+            Failed to apply. Make sure Memory is enabled in Settings → Skills and your agent is running.
           </div>
         )}
 

@@ -1,19 +1,44 @@
 import { prisma } from '@/lib/prisma'
 import { getEntities } from '../stores/semantic'
 import { getDecisions } from '../stores/decision'
-import { getDocuments } from '../stores/documents'
 import { countEvents } from '../stores/episodic'
+
+// Max total characters of document content to inject into the system prompt
+const DOC_CONTENT_BUDGET = 12000
+
+async function getDocumentsWithContent(instanceId: string) {
+  return (prisma as any).knowledgeDocument.findMany({
+    where: { instanceId, status: 'READY' },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      filename: true,
+      sizeBytes: true,
+      content: true,
+      chunkCount: true,
+    },
+  })
+}
+
+async function getAllDocuments(instanceId: string) {
+  return (prisma as any).knowledgeDocument.findMany({
+    where: { instanceId },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, filename: true, status: true },
+  })
+}
 
 export async function buildMemoryDigest(instanceId: string): Promise<string | null> {
   try {
-    const [entities, decisions, documents, totalEvents] = await Promise.all([
+    const [entities, decisions, docsWithContent, allDocs, totalEvents] = await Promise.all([
       getEntities(instanceId, 10),
       getDecisions(instanceId, 5, 0),
-      getDocuments(instanceId),
+      getDocumentsWithContent(instanceId),
+      getAllDocuments(instanceId),
       countEvents(instanceId),
     ])
 
-    if (entities.length === 0 && decisions.length === 0 && (documents as any[]).length === 0) {
+    if (entities.length === 0 && decisions.length === 0 && allDocs.length === 0) {
       return null
     }
 
@@ -42,10 +67,34 @@ export async function buildMemoryDigest(instanceId: string): Promise<string | nu
       }
     }
 
-    const docs = documents as any[]
+    // Inject document content inline, up to budget
+    const docs = docsWithContent as any[]
     if (docs.length > 0) {
-      lines.push(`\nKNOWLEDGE BASE (${docs.length} docs):`)
-      lines.push(docs.map((d: any) => d.filename).slice(0, 10).join(', '))
+      let budget = DOC_CONTENT_BUDGET
+      lines.push(`\nKNOWLEDGE BASE (${allDocs.length} docs):`)
+
+      for (const doc of docs) {
+        if (budget <= 0) break
+        const content: string = doc.content ?? ''
+        if (!content.trim()) {
+          lines.push(`\n--- ${doc.filename} (empty) ---`)
+          continue
+        }
+        const snippet = content.slice(0, budget)
+        const truncated = content.length > budget
+        lines.push(`\n--- ${doc.filename} ---`)
+        lines.push(snippet)
+        if (truncated) lines.push(`[...truncated, ${content.length - budget} chars remaining]`)
+        budget -= snippet.length
+      }
+
+      // List any pending/indexing docs that weren't included
+      const pendingDocs = (allDocs as any[]).filter(
+        (d: any) => d.status !== 'READY' || !docs.find((r: any) => r.id === d.id)
+      )
+      if (pendingDocs.length > 0) {
+        lines.push(`\nIndexing: ${pendingDocs.map((d: any) => d.filename).join(', ')}`)
+      }
     }
 
     if (totalEvents > 0) {
