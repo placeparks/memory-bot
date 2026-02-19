@@ -6,6 +6,8 @@ import { storeDocument, getDocuments, getTotalDocumentsMB } from '@/lib/memory/s
 import { getOrCreateMemoryConfig } from '@/lib/memory'
 import { getTierLimits } from '@/lib/memory/tiers'
 
+export const runtime = 'nodejs'
+
 async function verifyAccess(instanceId: string, req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (session?.user?.email) {
@@ -60,16 +62,10 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
     try {
       const bytes = await file.arrayBuffer()
       const buffer = Buffer.from(bytes)
-      const pdfParse = await new Function('return import("pdf-parse")')().catch(() => null)
-      if (pdfParse?.default) {
-        const parsed = await pdfParse.default(buffer)
-        content = parsed.text
-      } else {
-        return NextResponse.json(
-          { error: 'PDF support requires pdf-parse. Upload .txt or .md files instead.' },
-          { status: 422 }
-        )
-      }
+      const pdfParseMod = await new Function('return import("pdf-parse")')()
+      const parsePdf = (pdfParseMod?.default ?? pdfParseMod) as (b: Buffer) => Promise<{ text: string }>
+      const parsed = await parsePdf(buffer)
+      content = parsed.text
     } catch {
       return NextResponse.json({ error: 'Failed to parse PDF' }, { status: 422 })
     }
