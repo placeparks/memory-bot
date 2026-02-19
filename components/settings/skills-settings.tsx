@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { ConfigSaveBar } from './config-save-bar'
-import { Search, Globe, Mic, Layout, Clock, Eye, EyeOff } from 'lucide-react'
+import { Search, Globe, Mic, Layout, Clock, Eye, EyeOff, Brain } from 'lucide-react'
 
 const SKILLS: { key: string; name: string; icon: any; apiKeyField?: string; apiLabel?: string; badge?: string }[] = [
   { key: 'webSearchEnabled', name: 'Web Search', icon: Search, apiKeyField: 'braveApiKey', apiLabel: 'Brave API Key', badge: 'Popular' },
@@ -13,6 +13,7 @@ const SKILLS: { key: string; name: string; icon: any; apiKeyField?: string; apiL
   { key: 'ttsEnabled', name: 'Text-to-Speech', icon: Mic, apiKeyField: 'elevenlabsApiKey', apiLabel: 'ElevenLabs API Key' },
   { key: 'canvasEnabled', name: 'Canvas', icon: Layout, badge: 'Beta' },
   { key: 'cronEnabled', name: 'Scheduled Tasks', icon: Clock },
+  { key: 'memoryEnabled', name: 'Memory & RAG', icon: Brain, badge: 'New' },
 ]
 
 interface SkillsSettingsProps {
