@@ -53,17 +53,13 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
     )
   }
 
-  const bytes = await file.arrayBuffer()
-  const buffer = Buffer.from(bytes)
   let content = ''
-
   const name = file.name.toLowerCase()
-  if (name.endsWith('.txt') || name.endsWith('.md') || name.endsWith('.csv')) {
-    content = buffer.toString('utf-8')
-  } else if (name.endsWith('.pdf')) {
+
+  if (name.endsWith('.pdf')) {
     try {
-      // Dynamic import — only works if pdf-parse is installed
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const bytes = await file.arrayBuffer()
+      const buffer = Buffer.from(bytes)
       const pdfParse = await new Function('return import("pdf-parse")')().catch(() => null)
       if (pdfParse?.default) {
         const parsed = await pdfParse.default(buffer)
@@ -78,8 +74,8 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
       return NextResponse.json({ error: 'Failed to parse PDF' }, { status: 422 })
     }
   } else {
-    // Attempt UTF-8 text fallback
-    content = buffer.toString('utf-8')
+    // Use file.text() — works reliably across all Node.js versions
+    content = await file.text()
   }
 
   if (!content.trim()) {
