@@ -1,0 +1,405 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector]
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  password      String
+  pendingConfig Json?          // Store config before payment
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  subscription  Subscription?
+  instance      Instance?
+
+  @@map("users")
+}
+
+model Subscription {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  stripeCustomerId      String   @unique
+  stripeSubscriptionId  String   @unique
+  stripePriceId         String
+  stripeCurrentPeriodEnd DateTime
+
+  plan                  Plan
+  status                SubscriptionStatus
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("subscriptions")
+}
+
+enum Plan {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  INCOMPLETE
+  TRIALING
+  UNPAID
+}
+
+model Instance {
+  id            String          @id @default(cuid())
+  userId        String          @unique
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  containerId   String?         @unique
+  containerName String          @unique
+  port          Int             @unique
+  status        InstanceStatus
+
+  accessUrl     String?
+  serviceUrl    String?         // Internal service URL for API calls
+  qrCode        String?
+
+  deployBackend   String        @default("railway") // "railway" | "docker"
+  configVersion   Int           @default(1)
+  lastConfigApply DateTime?
+
+  config        Configuration?
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  lastHealthCheck DateTime?
+
+  @@map("instances")
+}
+
+enum InstanceStatus {
+  DEPLOYING
+  RUNNING
+  STOPPED
+  ERROR
+  RESTARTING
+}
+
+model Configuration {
+  id          String   @id @default(cuid())
+  instanceId  String   @unique
+  instance    Instance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  // AI Provider
+  provider    AIProvider
+  apiKey      String     @db.Text
+  model       String
+
+  // Channels
+  channels    Channel[]
+
+  // Skills & Extensions
+  webSearchEnabled    Boolean @default(false)
+  braveApiKey         String?
+  browserEnabled      Boolean @default(false)
+  ttsEnabled          Boolean @default(false)
+  elevenlabsApiKey    String?
+  canvasEnabled       Boolean @default(false)
+  cronEnabled         Boolean @default(false)
+  memoryEnabled       Boolean @default(false)
+
+  // Advanced Settings
+  workspace           String?
+  agentName           String?
+  systemPrompt        String? @db.Text
+  thinkingMode        String  @default("high")
+  sessionMode         String  @default("per-sender")
+  dmPolicy            String  @default("pairing")
+  gatewayToken        String?
+
+  // Full OpenClaw config JSON
+  fullConfig          Json
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("configurations")
+}
+
+enum AIProvider {
+  ANTHROPIC
+  OPENAI
+  OPENAI_CODEX
+  OPENCODE
+  GOOGLE
+  GOOGLE_VERTEX
+  ZAI
+  VERCEL_AI_GATEWAY
+  XAI
+  GROQ
+  MISTRAL
+  DEEPSEEK
+  CEREBRAS
+  VENICE
+  MOONSHOT
+  KIMI_CODE
+  MINIMAX
+  QWEN
+  SYNTHETIC
+  TOGETHER
+  NVIDIA
+  HUGGINGFACE
+  OPENROUTER
+  GITHUB_COPILOT
+  OLLAMA
+  BEDROCK
+}
+
+model Channel {
+  id              String        @id @default(cuid())
+  configId        String
+  configuration   Configuration @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  type            ChannelType
+  enabled         Boolean       @default(true)
+
+  // Channel-specific config (JSON)
+  config          Json
+
+  // Access info
+  botUsername     String?
+  phoneNumber     String?
+  inviteLink      String?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@map("channels")
+}
+
+enum ChannelType {
+  WHATSAPP
+  TELEGRAM
+  DISCORD
+  SLACK
+  SIGNAL
+  GOOGLE_CHAT
+  IMESSAGE
+  MATRIX
+  MSTEAMS
+}
+
+model DeploymentLog {
+  id          String   @id @default(cuid())
+  instanceId  String
+  action      String
+  status      String
+  message     String?  @db.Text
+  error       String?  @db.Text
+
+  createdAt   DateTime @default(now())
+
+  @@map("deployment_logs")
+}
+
+model ConfigChangeLog {
+  id          String   @id @default(cuid())
+  instanceId  String
+  field       String
+  action      String   // "update", "add", "remove"
+  status      String   @default("pending") // pending | applied | failed
+  createdAt   DateTime @default(now())
+
+  @@map("config_change_logs")
+}
+
+// ─────────────────────────────────────────────
+//  NEXUS MEMORY SYSTEM
+// ─────────────────────────────────────────────
+
+model MemoryEvent {
+  id             String          @id @default(cuid())
+  instanceId     String
+  sessionId      String?
+  eventType      MemoryEventType
+  channel        String?
+  senderId       String?
+  content        String          @db.Text
+  summary        String?         @db.Text
+  embedding      Unsupported("vector(1536)")?
+  importance     Float           @default(0.5)
+  consolidatedAt DateTime?
+  expiresAt      DateTime?
+  metadata       Json?
+
+  createdAt      DateTime        @default(now())
+
+  @@index([instanceId])
+  @@index([instanceId, senderId])
+  @@index([instanceId, createdAt])
+  @@map("memory_events")
+}
+
+enum MemoryEventType {
+  CONVERSATION
+  DECISION
+  TASK_COMPLETED
+  FEEDBACK
+  ERROR
+}
+
+model Entity {
+  id               String               @id @default(cuid())
+  instanceId       String
+  type             EntityType
+  name             String
+  aliases          String[]
+  summary          String?              @db.Text
+  embedding        Unsupported("vector(1536)")?
+  importance       Float                @default(0.5)
+  interactionCount Int                  @default(0)
+  lastSeen         DateTime?
+  metadata         Json?
+
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  relationshipsA   EntityRelationship[] @relation("EntityA")
+  relationshipsB   EntityRelationship[] @relation("EntityB")
+
+  @@unique([instanceId, name])
+  @@index([instanceId])
+  @@map("entities")
+}
+
+enum EntityType {
+  PERSON
+  ORGANIZATION
+  TOPIC
+  PRODUCT
+  LOCATION
+  OTHER
+}
+
+model EntityRelationship {
+  id               String   @id @default(cuid())
+  entityAId        String
+  entityBId        String
+  relationshipType String
+  confidence       Float    @default(0.8)
+  notes            String?
+  since            DateTime?
+
+  createdAt        DateTime @default(now())
+
+  entityA          Entity   @relation("EntityA", fields: [entityAId], references: [id], onDelete: Cascade)
+  entityB          Entity   @relation("EntityB", fields: [entityBId], references: [id], onDelete: Cascade)
+
+  @@unique([entityAId, entityBId, relationshipType])
+  @@map("entity_relationships")
+}
+
+model Decision {
+  id                String   @id @default(cuid())
+  instanceId        String
+  sessionId         String?
+  channel           String?
+  senderId          String?
+  decision          String   @db.Text
+  reasoning         String[]
+  confidence        Float    @default(0.7)
+  entitiesInvolved  String[]
+  documentsUsed     String[]
+  memoriesUsed      String[]
+  modelUsed         String?
+  tokensUsed        Int?
+  contextSnapshot   Json?
+  outcome           String?  @db.Text
+  outcomeAt         DateTime?
+  embedding         Unsupported("vector(1536)")?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([instanceId])
+  @@index([instanceId, createdAt])
+  @@map("decisions")
+}
+
+model KnowledgeDocument {
+  id          String         @id @default(cuid())
+  instanceId  String
+  filename    String
+  contentType String
+  sizeBytes   Int
+  content     String         @db.Text
+  status      DocumentStatus @default(PENDING)
+  chunkCount  Int            @default(0)
+  metadata    Json?
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  chunks      DocumentChunk[]
+
+  @@index([instanceId])
+  @@map("knowledge_documents")
+}
+
+enum DocumentStatus {
+  PENDING
+  INDEXING
+  READY
+  ERROR
+}
+
+model DocumentChunk {
+  id          String            @id @default(cuid())
+  documentId  String
+  instanceId  String
+  chunkIndex  Int
+  content     String            @db.Text
+  embedding   Unsupported("vector(1536)")?
+  metadata    Json?
+
+  createdAt   DateTime          @default(now())
+
+  document    KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId])
+  @@index([documentId])
+  @@map("document_chunks")
+}
+
+model MemoryConfig {
+  id              String     @id @default(cuid())
+  instanceId      String     @unique
+  tier            MemoryTier @default(STANDARD)
+  retentionDays   Int?
+  maxEntities     Int        @default(100)
+  maxDocumentsMB  Float      @default(500)
+  eventsThisMonth Int        @default(0)
+  documentsUsedMB Float      @default(0)
+  memoryApiKey    String     @unique
+  lastLogMinedAt  DateTime?
+  lastDigestAt    DateTime?
+  digestContent   String?    @db.Text
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@map("memory_configs")
+}
+
+enum MemoryTier {
+  STANDARD
+  PRO
+}

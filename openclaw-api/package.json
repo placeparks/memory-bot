@@ -1,0 +1,15 @@
+{
+  "name": "openclaw-pairing-api",
+  "version": "1.0.0",
+  "description": "HTTP API wrapper for OpenClaw pairing commands",
+  "main": "pairing-server.js",
+  "scripts": {
+    "start": "node pairing-server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

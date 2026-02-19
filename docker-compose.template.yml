@@ -1,0 +1,38 @@
+# Template for user instances
+# Variables: {userId}, {port}, {volumeName}
+
+version: '3.8'
+
+services:
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: openclaw-{userId}
+    restart: unless-stopped
+
+    environment:
+      # Injected by deployment script
+      - NODE_ENV=production
+
+    ports:
+      - "{port}:18789"
+
+    volumes:
+      - {volumeName}:/root/.openclaw
+
+    networks:
+      - kainat-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  {volumeName}:
+    driver: local
+
+networks:
+  kainat-network:
+    external: true

@@ -1,0 +1,17 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    curl ca-certificates bash git xz-utils tar \
+  && rm -rf /var/lib/apt/lists/*
+
+# Install OpenClaw CLI into a local prefix with its own Node runtime (non-interactive).
+RUN curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install-cli.sh \
+  | bash -s -- --prefix /opt/openclaw --no-onboard
+
+ENV PATH="/opt/openclaw/node/bin:/opt/openclaw/bin:$PATH"
+
+COPY openclaw-entrypoint.sh /usr/local/bin/openclaw-entrypoint.sh
+RUN chmod +x /usr/local/bin/openclaw-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/openclaw-entrypoint.sh"]

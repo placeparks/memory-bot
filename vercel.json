@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/memory/cron/mine",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/memory/cron/consolidate",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

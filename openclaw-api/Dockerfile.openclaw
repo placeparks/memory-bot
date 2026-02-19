@@ -1,0 +1,25 @@
+# Use OpenClaw base image
+FROM ghcr.io/openclaw/openclaw:latest
+
+# Install Node.js for our API server
+RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
+
+# Copy our pairing API server
+COPY pairing-server.js /app/pairing-server.js
+
+# Install express
+WORKDIR /app
+RUN npm init -y && npm install express
+
+# Expose ports
+# 18789 - OpenClaw Gateway (default)
+# 18800 - Our Pairing API
+EXPOSE 18789 18800
+
+# Create startup script that runs both services
+RUN echo '#!/bin/bash\n\
+node /app/pairing-server.js &\n\
+openclaw start\n\
+' > /app/start.sh && chmod +x /app/start.sh
+
+CMD ["/app/start.sh"]
