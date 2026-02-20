@@ -8,27 +8,44 @@ export async function getOrCreateMemoryConfig(instanceId: string) {
   let config = await (prisma as any).memoryConfig.findUnique({ where: { instanceId } })
 
   if (!config) {
-    config = await (prisma as any).memoryConfig.create({
-      data: {
-        instanceId,
-        maxDocumentsMB: 500,
-        memoryApiKey: randomBytes(32).toString('hex'),
-      },
-    })
+    try {
+      config = await (prisma as any).memoryConfig.create({
+        data: {
+          instanceId,
+          maxDocumentsMB: 500,
+          memoryApiKey: randomBytes(32).toString('hex'),
+        },
+      })
+    } catch (err) {
+      // Old schema may have extra NOT NULL columns — fall back to upsert with defaults
+      config = await (prisma as any).memoryConfig.upsert({
+        where: { instanceId },
+        create: {
+          instanceId,
+          maxDocumentsMB: 500,
+          memoryApiKey: randomBytes(32).toString('hex'),
+        },
+        update: {},
+      })
+    }
   }
 
   return config
 }
 
 export async function getMemoryStats(instanceId: string): Promise<MemoryStats> {
-  const config = await getOrCreateMemoryConfig(instanceId)
+  // Each count is wrapped independently — a missing table never zeroes out the others
+  const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+    try { return await fn() } catch { return fallback }
+  }
 
-  const [profiles, decisions, episodes, documents, documentsUsedMB] = await Promise.all([
-    (prisma as any).memoryProfile.count({ where: { instanceId } }),
-    countDecisions(instanceId),
-    (prisma as any).memoryEpisode.count({ where: { instanceId } }),
-    countDocuments(instanceId),
-    getTotalDocumentsMB(instanceId),
+  const [config, profiles, decisions, episodes, documents, documentsUsedMB] = await Promise.all([
+    safe(() => getOrCreateMemoryConfig(instanceId), null),
+    safe(() => (prisma as any).memoryProfile.count({ where: { instanceId } }), 0),
+    safe(() => countDecisions(instanceId), 0),
+    safe(() => (prisma as any).memoryEpisode.count({ where: { instanceId } }), 0),
+    safe(() => countDocuments(instanceId), 0),
+    safe(() => getTotalDocumentsMB(instanceId), 0),
   ])
 
   return {
@@ -37,8 +54,8 @@ export async function getMemoryStats(instanceId: string): Promise<MemoryStats> {
     episodes,
     documents,
     documentsUsedMB,
-    maxDocumentsMB: config.maxDocumentsMB,
-    memoryApiKey: config.memoryApiKey,
+    maxDocumentsMB: config?.maxDocumentsMB ?? 500,
+    memoryApiKey: config?.memoryApiKey ?? '',
   }
 }
 
