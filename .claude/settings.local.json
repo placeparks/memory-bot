@@ -56,7 +56,10 @@
       "WebFetch(domain:www.getopenclaw.ai)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:open-claw.bot)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git stash:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash pop:*)"
     ]
   }
 }
