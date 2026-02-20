@@ -5,31 +5,19 @@ import { prisma } from '@/lib/prisma'
 import { storeDocument, getDocuments, getTotalDocumentsMB } from '@/lib/memory/stores/documents'
 import { getOrCreateMemoryConfig } from '@/lib/memory'
 import { getTierLimits } from '@/lib/memory/tiers'
+import { createRequire } from 'node:module'
 
 export const runtime = 'nodejs'
 
-let cachedPdfParse: ((data: Buffer | Uint8Array) => Promise<{ text: string }>) | undefined
-let pdfPolyfillsReady: boolean | undefined
-async function getPdfParser(): Promise<(data: Buffer | Uint8Array) => Promise<{ text: string }>> {
-  if (cachedPdfParse) return cachedPdfParse
-  const mod = await import('pdf-parse')
-  const parse = (mod as any).default ?? (mod as any)
-  cachedPdfParse = parse as (data: Buffer | Uint8Array) => Promise<{ text: string }>
-  return cachedPdfParse
-}
-async function ensurePdfPolyfills() {
-  if (pdfPolyfillsReady) return
-  const g = globalThis as any
-  if (!g.DOMMatrix || !g.Path2D || !g.ImageData) {
-    const { createRequire } = await import('node:module')
-    const require = createRequire(import.meta.url)
-    const modName = ['@napi-rs', 'canvas'].join('/')
-    const canvas = require(modName)
-    g.DOMMatrix = g.DOMMatrix ?? canvas.DOMMatrix
-    g.Path2D = g.Path2D ?? canvas.Path2D
-    g.ImageData = g.ImageData ?? canvas.ImageData
-  }
-  pdfPolyfillsReady = true
+// Use createRequire to load pdf-parse as a CJS module, bypassing webpack bundling.
+// Dynamic import() bundles pdf-parse incorrectly in Next.js — .default ends up as
+// the module namespace object, not the function.
+function getPdfParse(): (data: Buffer) => Promise<{ text: string }> {
+  const req = createRequire(import.meta.url)
+  const mod = req('pdf-parse')
+  const fn = typeof mod === 'function' ? mod : mod?.default
+  if (typeof fn !== 'function') throw new Error('pdf-parse did not export a callable function')
+  return fn
 }
 
 async function verifyAccess(instanceId: string, req: NextRequest) {
@@ -84,27 +72,16 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
 
   if (name.endsWith('.pdf')) {
     try {
-      await ensurePdfPolyfills()
       const bytes = await file.arrayBuffer()
       const buffer = Buffer.from(bytes)
-      const parsePdf = await getPdfParser()
-      const parsed = await parsePdf(buffer)
+      const parsed = await getPdfParse()(buffer)
       content = parsed.text
-    } catch {
-      try {
-        await ensurePdfPolyfills()
-        const bytes = await file.arrayBuffer()
-        const uint8 = new Uint8Array(bytes)
-        const parsePdf = await getPdfParser()
-        const parsed = await parsePdf(uint8)
-        content = parsed.text
-      } catch (err: any) {
-        console.error('PDF parse failed', err)
-        return NextResponse.json(
-          { error: err?.message ? `Failed to parse PDF: ${err.message}` : 'Failed to parse PDF' },
-          { status: 422 }
-        )
-      }
+    } catch (err: any) {
+      console.error('PDF parse failed', err)
+      return NextResponse.json(
+        { error: err?.message ? `Failed to parse PDF: ${err.message}` : 'Failed to parse PDF' },
+        { status: 422 }
+      )
     }
   } else {
     // Use file.text() — works reliably across all Node.js versions
