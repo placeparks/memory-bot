@@ -9,12 +9,24 @@ import { getTierLimits } from '@/lib/memory/tiers'
 export const runtime = 'nodejs'
 
 let cachedPdfParse: ((data: Buffer | Uint8Array) => Promise<{ text: string }>) | undefined
+let pdfPolyfillsReady: boolean | undefined
 async function getPdfParser(): Promise<(data: Buffer | Uint8Array) => Promise<{ text: string }>> {
   if (cachedPdfParse) return cachedPdfParse
   const mod = await import('pdf-parse')
   const parse = (mod as any).default ?? (mod as any)
   cachedPdfParse = parse as (data: Buffer | Uint8Array) => Promise<{ text: string }>
   return cachedPdfParse
+}
+async function ensurePdfPolyfills() {
+  if (pdfPolyfillsReady) return
+  const g = globalThis as any
+  if (!g.DOMMatrix || !g.Path2D || !g.ImageData) {
+    const canvas = await import('@napi-rs/canvas')
+    g.DOMMatrix = g.DOMMatrix ?? canvas.DOMMatrix
+    g.Path2D = g.Path2D ?? canvas.Path2D
+    g.ImageData = g.ImageData ?? canvas.ImageData
+  }
+  pdfPolyfillsReady = true
 }
 
 async function verifyAccess(instanceId: string, req: NextRequest) {
@@ -69,6 +81,7 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
 
   if (name.endsWith('.pdf')) {
     try {
+      await ensurePdfPolyfills()
       const bytes = await file.arrayBuffer()
       const buffer = Buffer.from(bytes)
       const parsePdf = await getPdfParser()
@@ -76,6 +89,7 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
       content = parsed.text
     } catch {
       try {
+        await ensurePdfPolyfills()
         const bytes = await file.arrayBuffer()
         const uint8 = new Uint8Array(bytes)
         const parsePdf = await getPdfParser()
