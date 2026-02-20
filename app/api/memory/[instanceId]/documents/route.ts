@@ -9,15 +9,37 @@ import { createRequire } from 'node:module'
 
 export const runtime = 'nodejs'
 
-// Use createRequire to load pdf-parse as a CJS module, bypassing webpack bundling.
-// Dynamic import() bundles pdf-parse incorrectly in Next.js — .default ends up as
-// the module namespace object, not the function.
-function getPdfParse(): (data: Buffer) => Promise<{ text: string }> {
+// pdfjs-dist (used by pdf-parse) references DOMMatrix, a browser API not present in Node.js.
+// Polyfill it before the module loads to prevent "DOMMatrix is not defined" errors.
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  ;(globalThis as any).DOMMatrix = class DOMMatrix {
+    m11 = 1; m12 = 0; m13 = 0; m14 = 0
+    m21 = 0; m22 = 1; m23 = 0; m24 = 0
+    m31 = 0; m32 = 0; m33 = 1; m34 = 0
+    m41 = 0; m42 = 0; m43 = 0; m44 = 1
+    a = 1; b = 0; c = 0; d = 1; e = 0; f = 0
+    is2D = true; isIdentity = true
+    static fromMatrix() { return new (globalThis as any).DOMMatrix() }
+    transformPoint(p: any) { return p }
+    multiply() { return this }
+    translate() { return this }
+    scale() { return this }
+    rotate() { return this }
+    inverse() { return this }
+    toString() { return 'matrix(1,0,0,1,0,0)' }
+  }
+}
+
+// pdf-parse v2 exports a PDFParse class — use createRequire to bypass webpack bundling.
+async function parsePdf(buffer: Buffer): Promise<{ text: string }> {
   const req = createRequire(import.meta.url)
-  const mod = req('pdf-parse')
-  const fn = typeof mod === 'function' ? mod : mod?.default
-  if (typeof fn !== 'function') throw new Error('pdf-parse did not export a callable function')
-  return fn
+  const { PDFParse } = req('pdf-parse')
+  const parser = new PDFParse({ data: buffer })
+  try {
+    return await parser.getText()
+  } finally {
+    await parser.destroy()
+  }
 }
 
 async function verifyAccess(instanceId: string, req: NextRequest) {
@@ -74,7 +96,7 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
     try {
       const bytes = await file.arrayBuffer()
       const buffer = Buffer.from(bytes)
-      const parsed = await getPdfParse()(buffer)
+      const parsed = await parsePdf(buffer)
       content = parsed.text
     } catch (err: any) {
       console.error('PDF parse failed', err)
