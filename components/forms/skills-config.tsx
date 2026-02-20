@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Search, Globe, Mic, Layout, Clock, ExternalLink, Brain } from 'lucide-react'
+import { Search, Globe, Mic, ExternalLink, Brain } from 'lucide-react'
 
 const skills = [
   {
@@ -34,19 +34,6 @@ const skills = [
     apiKeyLabel: 'ElevenLabs API Key',
     apiKeyPlaceholder: 'Enter ElevenLabs API key',
     getKeyUrl: 'https://elevenlabs.io/'
-  },
-  {
-    key: 'canvasEnabled',
-    name: 'Canvas',
-    icon: Layout,
-    description: 'Visual workspace for agent interactions',
-    badge: 'Beta'
-  },
-  {
-    key: 'cronEnabled',
-    name: 'Scheduled Tasks',
-    icon: Clock,
-    description: 'Run tasks on a schedule'
   },
   {
     key: 'memoryEnabled',
