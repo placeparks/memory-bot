@@ -55,6 +55,14 @@ function filterConfiguredChannels(channels: UserConfiguration['channels']): User
   })
 }
 
+/** Map internal dmPolicy values to OpenClaw-valid values */
+function normalizeDmPolicy(value: string | undefined): string {
+  if (value === 'closed') return 'disabled'
+  if (value === 'allowlist') return 'allowlist'
+  if (value === 'open') return 'open'
+  return 'pairing' // default
+}
+
 export function generateOpenClawConfig(userConfig: UserConfiguration) {
   const normalizeAllowlist = (value: any): string[] => {
     if (!value) return []
@@ -127,13 +135,6 @@ export function generateOpenClawConfig(userConfig: UserConfiguration) {
     config.agents.defaults.thinkingDefault = userConfig.thinkingMode
   }
 
-  // Add session settings
-  if (userConfig.sessionMode) {
-    config.session = {
-      scope: userConfig.sessionMode
-    }
-  }
-
   // Configure channels (skip any that lack required credentials)
   const configuredChannels = filterConfiguredChannels(userConfig.channels)
   configuredChannels.forEach(channel => {
@@ -143,7 +144,7 @@ export function generateOpenClawConfig(userConfig: UserConfiguration) {
       case 'WHATSAPP':
         config.channels.whatsapp = {
           allowFrom: normalizeAllowlist(channel.config.allowlist),
-          dmPolicy: channel.config.dmPolicy || userConfig.dmPolicy || 'pairing',
+          dmPolicy: normalizeDmPolicy(channel.config.dmPolicy || userConfig.dmPolicy),
           ...(channel.config.groups && { groups: channel.config.groups }),
           ...(channel.config.selfChatMode && { selfChatMode: true })
         }
@@ -154,7 +155,7 @@ export function generateOpenClawConfig(userConfig: UserConfiguration) {
           enabled: true,
           botToken: channel.config.botToken,
           allowFrom: normalizeAllowlist(channel.config.allowlist),
-          dmPolicy: userConfig.dmPolicy || 'pairing'
+          dmPolicy: normalizeDmPolicy(userConfig.dmPolicy)
         }
         break
 
@@ -163,7 +164,7 @@ export function generateOpenClawConfig(userConfig: UserConfiguration) {
           enabled: true,
           token: channel.config.token,
           dm: {
-            policy: userConfig.dmPolicy || 'pairing',
+            policy: normalizeDmPolicy(userConfig.dmPolicy),
             allowFrom: normalizeAllowlist(channel.config.allowlist)
           },
           ...(normalizeGuilds(channel.config.guilds) && { guilds: normalizeGuilds(channel.config.guilds) })
@@ -176,7 +177,7 @@ export function generateOpenClawConfig(userConfig: UserConfiguration) {
           botToken: channel.config.botToken,
           appToken: channel.config.appToken,
           dm: {
-            policy: userConfig.dmPolicy || 'pairing',
+            policy: normalizeDmPolicy(userConfig.dmPolicy),
             allowFrom: normalizeAllowlist(channel.config.allowlist)
           }
         }
