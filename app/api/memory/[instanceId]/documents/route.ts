@@ -4,7 +4,6 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { storeDocument, getDocuments, getTotalDocumentsMB } from '@/lib/memory/stores/documents'
 import { getOrCreateMemoryConfig } from '@/lib/memory'
-import { getTierLimits } from '@/lib/memory/tiers'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { join } from 'node:path'
@@ -86,7 +85,6 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const config = await getOrCreateMemoryConfig(instanceId)
-  const limits = getTierLimits(config.tier as 'STANDARD' | 'PRO')
   const usedMB = await getTotalDocumentsMB(instanceId)
 
   const formData = await req.formData()
@@ -94,9 +92,9 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
   if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
 
   const fileSizeMB = file.size / (1024 * 1024)
-  if (usedMB + fileSizeMB > limits.maxDocumentsMB) {
+  if (usedMB + fileSizeMB > config.maxDocumentsMB) {
     return NextResponse.json(
-      { error: `Storage limit reached (${limits.maxDocumentsMB} MB). Upgrade to Pro for more.` },
+      { error: `Storage limit reached (${config.maxDocumentsMB} MB).` },
       { status: 429 }
     )
   }

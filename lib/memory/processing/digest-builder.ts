@@ -1,22 +1,16 @@
 import { prisma } from '@/lib/prisma'
-import { getEntities } from '../stores/semantic'
-import { getDecisions } from '../stores/decision'
-import { countEvents } from '../stores/episodic'
+import { getProfile } from '../stores/profiles'
+import { getDecisions } from '../stores/decisions'
+import { getEpisodes } from '../stores/episodes'
 
 // Max total characters of document content to inject into the system prompt
-const DOC_CONTENT_BUDGET = 12000
+const DOC_CONTENT_BUDGET = 12_000
 
 async function getDocumentsWithContent(instanceId: string) {
   return (prisma as any).knowledgeDocument.findMany({
     where: { instanceId, status: 'READY' },
     orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      filename: true,
-      sizeBytes: true,
-      content: true,
-      chunkCount: true,
-    },
+    select: { id: true, filename: true, content: true },
   })
 }
 
@@ -28,50 +22,82 @@ async function getAllDocuments(instanceId: string) {
   })
 }
 
-export async function buildMemoryDigest(instanceId: string): Promise<string | null> {
+export async function buildMemoryDigest(
+  instanceId: string,
+  senderId = 'default'
+): Promise<string | null> {
   try {
-    const [entities, decisions, docsWithContent, allDocs, totalEvents] = await Promise.all([
-      getEntities(instanceId, 10),
-      getDecisions(instanceId, 5, 0),
+    const [profile, decisions, episodes, docsWithContent, allDocs] = await Promise.all([
+      getProfile(instanceId, senderId),
+      getDecisions(instanceId, { limit: 5 }),
+      getEpisodes(instanceId, { limit: 7, senderId: senderId !== 'default' ? senderId : undefined }),
       getDocumentsWithContent(instanceId),
       getAllDocuments(instanceId),
-      countEvents(instanceId),
     ])
 
-    if (entities.length === 0 && decisions.length === 0 && allDocs.length === 0) {
-      return null
+    const hasContent =
+      profile || decisions.length > 0 || episodes.length > 0 || allDocs.length > 0
+    if (!hasContent) return null
+
+    const lines: string[] = []
+
+    // Header
+    const headerName = profile?.name ?? senderId
+    lines.push(`[MEMORY — ${headerName}]`)
+
+    // Layer 1 — Profile
+    if (profile) {
+      lines.push('\nPROFILE:')
+      const profileParts: string[] = []
+      if (profile.role) profileParts.push(`Role: ${profile.role}`)
+      if (profile.timezone) profileParts.push(`Timezone: ${profile.timezone}`)
+      if (profileParts.length) lines.push(profileParts.join(' | '))
+      if (profile.communicationStyle) lines.push(`Style: ${profile.communicationStyle}`)
+      if (profile.currentFocus) lines.push(`Focus: ${profile.currentFocus}`)
+      if (profile.preferences?.length) lines.push(`Prefs: ${profile.preferences.join(', ')}`)
+      if (profile.relationshipContext) lines.push(`Context: ${profile.relationshipContext}`)
     }
 
-    const lines: string[] = ['[NEXUS MEMORY]']
-
-    if (entities.length > 0) {
-      lines.push(`\nKNOWN CONTACTS & ENTITIES (${entities.length}):`)
-      for (const e of entities.slice(0, 8)) {
-        const lastSeen = e.lastSeen
-          ? `Last seen ${Math.floor((Date.now() - new Date(e.lastSeen).getTime()) / 86400000)}d ago.`
-          : ''
-        const summary = e.summary ? e.summary.slice(0, 120) : ''
-        lines.push(`• ${e.name} (${e.type}) — ${summary}${summary ? ' ' : ''}${lastSeen}`)
-      }
-    }
-
+    // Layer 2 — Decision history
     if (decisions.length > 0) {
-      lines.push(`\nRECENT DECISIONS:`)
-      for (const d of decisions.slice(0, 5)) {
+      lines.push('\nDECISION HISTORY:')
+      for (const d of decisions) {
+        lines.push('──────────────────────────────────────────────')
         const date = new Date(d.createdAt).toISOString().split('T')[0]
-        const firstReason = d.reasoning[0] ?? ''
-        lines.push(
-          `• ${date}: ${d.decision.slice(0, 140)}` +
-          (firstReason ? ` — "${firstReason.slice(0, 80)}"` : '')
-        )
+        const tags = d.tags.map((t: string) => `#${t}`).join(' ')
+        const worked = d.outcome ? '  ✓ WORKED' : ''
+        lines.push(`${date}  ${tags}${worked}`)
+        lines.push(`Decided: ${d.decision}`)
+        if (d.reasoning.length > 0) {
+          const reasons = d.reasoning.slice(0, 3).join('; ')
+          lines.push(`Because: ${reasons}`)
+        }
+        if (d.alternativesConsidered?.length) {
+          lines.push(`Alternatives: ${d.alternativesConsidered.join(', ')}`)
+        }
+        if (d.outcome) {
+          lines.push(`Result: ${d.outcome} ✓`)
+        }
+      }
+      lines.push('──────────────────────────────────────────────')
+      lines.push('(Search older: GET /decisions?tags=X)')
+    }
+
+    // Layer 3 — Recent episodes
+    if (episodes.length > 0) {
+      lines.push('\nRECENT EPISODES:')
+      for (const ep of episodes) {
+        const date = new Date(ep.happenedAt).toISOString().split('T')[0]
+        const tags = ep.tags?.length ? ` [${ep.tags.join(', ')}]` : ''
+        lines.push(`• ${date}${tags}: ${ep.summary}`)
       }
     }
 
-    // Inject document content inline, up to budget
+    // Knowledge base
     const docs = docsWithContent as any[]
-    if (docs.length > 0) {
+    if (allDocs.length > 0) {
+      lines.push('\nKNOWLEDGE BASE:')
       let budget = DOC_CONTENT_BUDGET
-      lines.push(`\nKNOWLEDGE BASE (${allDocs.length} docs):`)
 
       for (const doc of docs) {
         if (budget <= 0) break
@@ -84,11 +110,10 @@ export async function buildMemoryDigest(instanceId: string): Promise<string | nu
         const truncated = content.length > budget
         lines.push(`\n--- ${doc.filename} ---`)
         lines.push(snippet)
-        if (truncated) lines.push(`[...truncated, ${content.length - budget} chars remaining]`)
+        if (truncated) lines.push(`[...${content.length - budget} chars truncated]`)
         budget -= snippet.length
       }
 
-      // List any pending/indexing docs that weren't included
       const pendingDocs = (allDocs as any[]).filter(
         (d: any) => d.status !== 'READY' || !docs.find((r: any) => r.id === d.id)
       )
@@ -97,11 +122,7 @@ export async function buildMemoryDigest(instanceId: string): Promise<string | nu
       }
     }
 
-    if (totalEvents > 0) {
-      lines.push(`\nMEMORY: ${totalEvents} total interactions stored.`)
-    }
-
-    lines.push('[/NEXUS MEMORY]')
+    lines.push('[/MEMORY]')
 
     const digest = lines.join('\n')
 

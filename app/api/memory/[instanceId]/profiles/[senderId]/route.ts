@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getDecisionById, updateDecisionOutcome } from '@/lib/memory/stores/decisions'
+import { getProfile, upsertProfile, deleteProfile } from '@/lib/memory/stores/profiles'
 
 async function verifyAccess(instanceId: string, req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -23,34 +23,38 @@ async function verifyAccess(instanceId: string, req: NextRequest) {
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { instanceId: string; id: string } }
+  { params }: { params: { instanceId: string; senderId: string } }
 ) {
-  const { instanceId, id } = params
+  const { instanceId, senderId } = params
   if (!(await verifyAccess(instanceId, req)))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const decision = await getDecisionById(id)
-  if (!decision || decision.instanceId !== instanceId)
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  return NextResponse.json({ decision })
+  const profile = await getProfile(instanceId, senderId)
+  if (!profile) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  return NextResponse.json({ profile })
 }
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { instanceId: string; id: string } }
+  { params }: { params: { instanceId: string; senderId: string } }
 ) {
-  const { instanceId, id } = params
+  const { instanceId, senderId } = params
   if (!(await verifyAccess(instanceId, req)))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { outcome } = await req.json()
-  if (!outcome) return NextResponse.json({ error: 'outcome required' }, { status: 400 })
+  const body = await req.json()
+  const profile = await upsertProfile({ ...body, instanceId, senderId })
+  return NextResponse.json({ profile })
+}
 
-  const decision = await getDecisionById(id)
-  if (!decision || decision.instanceId !== instanceId)
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { instanceId: string; senderId: string } }
+) {
+  const { instanceId, senderId } = params
+  if (!(await verifyAccess(instanceId, req)))
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  await updateDecisionOutcome(id, outcome)
+  await deleteProfile(instanceId, senderId)
   return NextResponse.json({ success: true })
 }

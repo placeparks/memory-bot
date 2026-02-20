@@ -1,111 +1,92 @@
-export type MemoryTier = 'STANDARD' | 'PRO'
-export type MemoryEventType = 'CONVERSATION' | 'DECISION' | 'TASK_COMPLETED' | 'FEEDBACK' | 'ERROR'
-export type EntityType = 'PERSON' | 'ORGANIZATION' | 'TOPIC' | 'PRODUCT' | 'LOCATION' | 'OTHER'
+// ── Profile ──────────────────────────────────────────────────────────────────
 
-export interface MemoryEventCreate {
+export interface ProfileData {
   instanceId: string
-  sessionId?: string
-  eventType: MemoryEventType
-  channel?: string
   senderId?: string
-  content: string
-  summary?: string
-  importance?: number
+  name?: string
+  role?: string
+  communicationStyle?: string
+  timezone?: string
+  currentFocus?: string
+  relationshipContext?: string
+  preferences?: string[]
   metadata?: Record<string, any>
 }
 
-export interface MemoryEventRow {
+export interface ProfileRow extends Required<Pick<ProfileData, 'instanceId' | 'senderId'>> {
   id: string
-  instanceId: string
-  sessionId?: string
-  eventType: MemoryEventType
-  channel?: string
-  senderId?: string
-  content: string
-  summary?: string
-  importance: number
-  consolidatedAt?: Date
-  expiresAt?: Date
-  metadata?: Record<string, any>
-  createdAt: Date
-}
-
-export interface MemorySearchResult extends MemoryEventRow {
-  similarity: number
-}
-
-export interface EntityCreate {
-  instanceId: string
-  type: EntityType
-  name: string
-  aliases?: string[]
-  summary?: string
-  metadata?: Record<string, any>
-}
-
-export interface EntityRow {
-  id: string
-  instanceId: string
-  type: EntityType
-  name: string
-  aliases: string[]
-  summary?: string
-  importance: number
-  interactionCount: number
-  lastSeen?: Date
-  metadata?: Record<string, any>
+  name: string | null
+  role: string | null
+  communicationStyle: string | null
+  timezone: string | null
+  currentFocus: string | null
+  relationshipContext: string | null
+  preferences: string[]
+  metadata: Record<string, any> | null
   createdAt: Date
   updatedAt: Date
 }
 
-export interface EntityWithRelationships extends EntityRow {
-  relationships: Array<{
-    id: string
-    entityId: string
-    entityName: string
-    entityType: EntityType
-    relationshipType: string
-    confidence: number
-    notes?: string
-  }>
-}
+// ── Decision ─────────────────────────────────────────────────────────────────
 
-export interface DecisionCreate {
+export interface DecisionData {
   instanceId: string
-  sessionId?: string
-  channel?: string
   senderId?: string
+  context: string
   decision: string
   reasoning: string[]
-  confidence?: number
-  entitiesInvolved?: string[]
-  documentsUsed?: string[]
-  memoriesUsed?: string[]
-  modelUsed?: string
-  tokensUsed?: number
-  contextSnapshot?: Record<string, any>
+  alternativesConsidered?: string[]
+  tags?: string[]
 }
 
 export interface DecisionRow {
   id: string
   instanceId: string
-  sessionId?: string
-  channel?: string
-  senderId?: string
+  senderId: string | null
+  context: string
   decision: string
   reasoning: string[]
-  confidence: number
-  entitiesInvolved: string[]
-  documentsUsed: string[]
-  memoriesUsed: string[]
-  modelUsed?: string
-  tokensUsed?: number
-  contextSnapshot?: Record<string, any>
-  outcome?: string
-  outcomeAt?: Date
+  alternativesConsidered: string[]
+  tags: string[]
+  outcome: string | null
+  outcomeAt: Date | null
   createdAt: Date
   updatedAt: Date
 }
+
+// ── Episode ───────────────────────────────────────────────────────────────────
+
+export interface EpisodeData {
+  instanceId: string
+  senderId?: string
+  summary: string
+  tags?: string[]
+  happenedAt?: Date
+}
+
+export interface EpisodeRow {
+  id: string
+  instanceId: string
+  senderId: string | null
+  summary: string
+  tags: string[]
+  happenedAt: Date
+  createdAt: Date
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+export interface MemoryStats {
+  profiles: number
+  decisions: number
+  episodes: number
+  documents: number
+  documentsUsedMB: number
+  maxDocumentsMB: number
+  memoryApiKey: string
+}
+
+// ── RAG (documents — unchanged) ───────────────────────────────────────────────
 
 export interface RAGResult {
   content: string
@@ -115,43 +96,4 @@ export interface RAGResult {
     filename: string
     chunkIndex: number
   }
-}
-
-export interface TierLimits {
-  retentionDays: number | null
-  maxEntities: number | null
-  maxDocumentsMB: number
-  maxEventsPerMonth: number
-}
-
-export interface MemoryStats {
-  tier: MemoryTier
-  totalEvents: number
-  totalEntities: number
-  totalDecisions: number
-  totalDocuments: number
-  documentsUsedMB: number
-  eventsThisMonth: number
-  limits: TierLimits
-  memoryApiKey: string
-}
-
-export interface ExtractedEvent {
-  eventType: MemoryEventType
-  sessionId?: string
-  channel?: string
-  senderId?: string
-  content: string
-  summary: string
-  importance: number
-  decision?: string
-  reasoning?: string[]
-}
-
-export interface ExtractedEntity {
-  name: string
-  type: EntityType
-  aliases: string[]
-  context: string
-  relationships: Array<{ entity: string; type: string }>
 }

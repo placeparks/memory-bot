@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { storeDecision, getDecisions } from '@/lib/memory/stores/decisions'
+import { storeEpisode, getEpisodes } from '@/lib/memory/stores/episodes'
 
 async function verifyAccess(instanceId: string, req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -28,13 +28,11 @@ export async function GET(req: NextRequest, { params }: { params: { instanceId: 
 
   const url = new URL(req.url)
   const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '50'), 200)
-  const offset = parseInt(url.searchParams.get('offset') ?? '0')
-  const tagsParam = url.searchParams.get('tags')
-  const tags = tagsParam ? tagsParam.split(',').map(t => t.trim()).filter(Boolean) : undefined
+  const senderId = url.searchParams.get('senderId') ?? undefined
   const since = url.searchParams.get('since') ? new Date(url.searchParams.get('since')!) : undefined
 
-  const decisions = await getDecisions(instanceId, { tags, since, limit, offset })
-  return NextResponse.json({ decisions })
+  const episodes = await getEpisodes(instanceId, { limit, senderId, since })
+  return NextResponse.json({ episodes })
 }
 
 export async function POST(req: NextRequest, { params }: { params: { instanceId: string } }) {
@@ -43,24 +41,19 @@ export async function POST(req: NextRequest, { params }: { params: { instanceId:
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { context, decision, reasoning, alternativesConsidered, tags, senderId } = body
+  const { summary, tags, senderId, happenedAt } = body
 
-  if (!context || !decision || !Array.isArray(reasoning)) {
-    return NextResponse.json(
-      { error: 'context, decision, and reasoning[] are required' },
-      { status: 400 }
-    )
+  if (!summary) {
+    return NextResponse.json({ error: 'summary is required' }, { status: 400 })
   }
 
-  const row = await storeDecision({
+  const episode = await storeEpisode({
     instanceId,
     senderId,
-    context,
-    decision,
-    reasoning,
-    alternativesConsidered,
+    summary,
     tags,
+    happenedAt: happenedAt ? new Date(happenedAt) : undefined,
   })
 
-  return NextResponse.json({ id: row.id })
+  return NextResponse.json({ episode })
 }

@@ -225,113 +225,65 @@ model ConfigChangeLog {
 //  NEXUS MEMORY SYSTEM
 // ─────────────────────────────────────────────
 
-model MemoryEvent {
-  id             String          @id @default(cuid())
-  instanceId     String
-  sessionId      String?
-  eventType      MemoryEventType
-  channel        String?
-  senderId       String?
-  content        String          @db.Text
-  summary        String?         @db.Text
-  embedding      Unsupported("vector(1536)")?
-  importance     Float           @default(0.5)
-  consolidatedAt DateTime?
-  expiresAt      DateTime?
-  metadata       Json?
+// Per-user/sender identity profile. One row per (instanceId, senderId).
+// senderId = 'default' for single-user bots.
+model MemoryProfile {
+  id                 String   @id @default(cuid())
+  instanceId         String
+  senderId           String   @default("default")
+  name               String?
+  role               String?
+  communicationStyle String?
+  timezone           String?
+  currentFocus       String?  @db.Text
+  relationshipContext String? @db.Text
+  preferences        String[]
+  metadata           Json?
 
-  createdAt      DateTime        @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
+  @@unique([instanceId, senderId])
   @@index([instanceId])
-  @@index([instanceId, senderId])
-  @@index([instanceId, createdAt])
-  @@map("memory_events")
+  @@map("memory_profiles")
 }
 
-enum MemoryEventType {
-  CONVERSATION
-  DECISION
-  TASK_COMPLETED
-  FEEDBACK
-  ERROR
-}
+// Structured decision journal with full reasoning chains + outcomes.
+// Agent writes these during conversations. Queryable by tags or date range.
+model MemoryDecision {
+  id                     String    @id @default(cuid())
+  instanceId             String
+  senderId               String?
+  context                String    @db.Text
+  decision               String    @db.Text
+  reasoning              String[]
+  alternativesConsidered String[]
+  tags                   String[]
+  outcome                String?   @db.Text
+  outcomeAt              DateTime?
 
-model Entity {
-  id               String               @id @default(cuid())
-  instanceId       String
-  type             EntityType
-  name             String
-  aliases          String[]
-  summary          String?              @db.Text
-  embedding        Unsupported("vector(1536)")?
-  importance       Float                @default(0.5)
-  interactionCount Int                  @default(0)
-  lastSeen         DateTime?
-  metadata         Json?
-
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-
-  relationshipsA   EntityRelationship[] @relation("EntityA")
-  relationshipsB   EntityRelationship[] @relation("EntityB")
-
-  @@unique([instanceId, name])
-  @@index([instanceId])
-  @@map("entities")
-}
-
-enum EntityType {
-  PERSON
-  ORGANIZATION
-  TOPIC
-  PRODUCT
-  LOCATION
-  OTHER
-}
-
-model EntityRelationship {
-  id               String   @id @default(cuid())
-  entityAId        String
-  entityBId        String
-  relationshipType String
-  confidence       Float    @default(0.8)
-  notes            String?
-  since            DateTime?
-
-  createdAt        DateTime @default(now())
-
-  entityA          Entity   @relation("EntityA", fields: [entityAId], references: [id], onDelete: Cascade)
-  entityB          Entity   @relation("EntityB", fields: [entityBId], references: [id], onDelete: Cascade)
-
-  @@unique([entityAId, entityBId, relationshipType])
-  @@map("entity_relationships")
-}
-
-model Decision {
-  id                String   @id @default(cuid())
-  instanceId        String
-  sessionId         String?
-  channel           String?
-  senderId          String?
-  decision          String   @db.Text
-  reasoning         String[]
-  confidence        Float    @default(0.7)
-  entitiesInvolved  String[]
-  documentsUsed     String[]
-  memoriesUsed      String[]
-  modelUsed         String?
-  tokensUsed        Int?
-  contextSnapshot   Json?
-  outcome           String?  @db.Text
-  outcomeAt         DateTime?
-  embedding         Unsupported("vector(1536)")?
-
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   @@index([instanceId])
   @@index([instanceId, createdAt])
-  @@map("decisions")
+  @@map("memory_decisions")
+}
+
+// Compressed episode summaries — 1-2 sentence snapshots of significant exchanges.
+// Agent writes these to capture context without storing raw logs.
+model MemoryEpisode {
+  id         String   @id @default(cuid())
+  instanceId String
+  senderId   String?
+  summary    String   @db.Text
+  tags       String[]
+  happenedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([instanceId])
+  @@index([instanceId, happenedAt])
+  @@map("memory_episodes")
 }
 
 model KnowledgeDocument {
@@ -379,27 +331,17 @@ model DocumentChunk {
   @@map("document_chunks")
 }
 
+// Per-instance memory config: API key for agent auth + doc storage limit.
 model MemoryConfig {
-  id              String     @id @default(cuid())
-  instanceId      String     @unique
-  tier            MemoryTier @default(STANDARD)
-  retentionDays   Int?
-  maxEntities     Int        @default(100)
-  maxDocumentsMB  Float      @default(500)
-  eventsThisMonth Int        @default(0)
-  documentsUsedMB Float      @default(0)
-  memoryApiKey    String     @unique
-  lastLogMinedAt  DateTime?
-  lastDigestAt    DateTime?
-  digestContent   String?    @db.Text
+  id             String   @id @default(cuid())
+  instanceId     String   @unique
+  memoryApiKey   String   @unique
+  maxDocumentsMB Float    @default(500)
+  lastDigestAt   DateTime?
+  digestContent  String?  @db.Text
 
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("memory_configs")
-}
-
-enum MemoryTier {
-  STANDARD
-  PRO
 }
