@@ -109,12 +109,12 @@ export async function ragSearchByVector(
     filename: string
     similarity: number
   }>>(
-    `SELECT dc.id as chunk_id, dc.content, dc.chunk_index,
+    `SELECT dc.id as chunk_id, dc.content, dc."chunkIndex" as chunk_index,
             kd.id as doc_id, kd.filename,
             1 - (dc.embedding <=> $1::vector) as similarity
      FROM document_chunks dc
-     JOIN knowledge_documents kd ON dc.document_id = kd.id
-     WHERE kd.instance_id = $2 AND kd.status = 'READY' AND dc.embedding IS NOT NULL
+     JOIN knowledge_documents kd ON dc."documentId" = kd.id
+     WHERE kd."instanceId" = $2 AND kd.status = 'READY' AND dc.embedding IS NOT NULL
      ORDER BY dc.embedding <=> $1::vector
      LIMIT $3`,
     embeddingStr,
@@ -142,12 +142,12 @@ export async function ragSearchByText(
     filename: string
     similarity: number
   }>>(
-    `SELECT dc.id as chunk_id, dc.content, dc.chunk_index,
+    `SELECT dc.id as chunk_id, dc.content, dc."chunkIndex" as chunk_index,
             kd.id as doc_id, kd.filename,
             ts_rank(to_tsvector('english', dc.content), plainto_tsquery('english', $1)) as similarity
      FROM document_chunks dc
-     JOIN knowledge_documents kd ON dc.document_id = kd.id
-     WHERE kd.instance_id = $2 AND kd.status = 'READY'
+     JOIN knowledge_documents kd ON dc."documentId" = kd.id
+     WHERE kd."instanceId" = $2 AND kd.status = 'READY'
        AND to_tsvector('english', dc.content) @@ plainto_tsquery('english', $1)
      ORDER BY similarity DESC
      LIMIT $3`,
