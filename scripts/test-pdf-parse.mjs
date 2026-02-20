@@ -7,7 +7,7 @@
  */
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
-import { resolve, dirname } from 'node:path'
+import { join } from 'node:path'
 
 // ── Minimal valid PDF (no content stream, just structure) ──────────────────
 // Built so the xref offsets are exact. pdfjs-dist accepts pages with no
@@ -79,12 +79,15 @@ async function main() {
   const req = createRequire(import.meta.url)
   const { PDFParse } = req('pdf-parse')
 
-  // ── 1. Resolve worker path (same as API route) ──────────────────────────
-  const pdfParseMain = req.resolve('pdf-parse')
-  const workerPath   = resolve(dirname(pdfParseMain), 'pdf.worker.mjs')
-  const workerUrl    = pathToFileURL(workerPath).href
+  // ── 1. Resolve worker path (mirrors API route exactly) ──────────────────
+  // Use process.cwd() — same as the route. req.resolve() returns a webpack
+  // module ID (number) when called from a bundled context, so we avoid it.
+  const workerPath = join(
+    process.cwd(),
+    'node_modules', 'pdf-parse', 'dist', 'pdf-parse', 'cjs', 'pdf.worker.mjs'
+  )
+  const workerUrl = pathToFileURL(workerPath).href
 
-  console.log('  pdf-parse CJS :', pdfParseMain)
   console.log('  worker path   :', workerPath)
   console.log('  worker URL    :', workerUrl)
 

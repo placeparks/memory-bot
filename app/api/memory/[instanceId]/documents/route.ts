@@ -7,7 +7,7 @@ import { getOrCreateMemoryConfig } from '@/lib/memory'
 import { getTierLimits } from '@/lib/memory/tiers'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
-import { resolve, dirname } from 'node:path'
+import { join } from 'node:path'
 
 export const runtime = 'nodejs'
 
@@ -36,11 +36,15 @@ if (typeof globalThis.DOMMatrix === 'undefined') {
 async function parsePdf(buffer: Buffer): Promise<{ text: string }> {
   const req = createRequire(import.meta.url)
   const { PDFParse } = req('pdf-parse')
-  // pdfjs-dist's fake-worker setup does `await import('./pdf.worker.mjs')` which
-  // resolves relative to the CJS bundle directory. Set an absolute file:// URL so
-  // the import succeeds regardless of how Next.js resolves relative paths.
-  const pdfParseMain: string = req.resolve('pdf-parse')
-  const workerPath = resolve(dirname(pdfParseMain), 'pdf.worker.mjs')
+  // pdfjs-dist's fake-worker setup does `await import('./pdf.worker.mjs')`.
+  // We cannot use req.resolve() here — when webpack bundles this route it
+  // shims createRequire and resolve() returns a numeric module ID, not a path.
+  // Use process.cwd() (always the Next.js project root, both in dev and in
+  // standalone production) to construct an absolute file:// worker URL instead.
+  const workerPath = join(
+    process.cwd(),
+    'node_modules', 'pdf-parse', 'dist', 'pdf-parse', 'cjs', 'pdf.worker.mjs'
+  )
   PDFParse.setWorker(pathToFileURL(workerPath).href)
   const parser = new PDFParse({ data: buffer })
   try {
