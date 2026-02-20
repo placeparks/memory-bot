@@ -3,6 +3,7 @@ import { getProvider } from './index'
 import {
   generateOpenClawConfig,
   buildSystemPromptWithMemory,
+  buildMemoryInstructions,
   UserConfiguration,
 } from '@/lib/openclaw/config-builder'
 import { decrypt, encrypt } from '@/lib/utils/encryption'
@@ -242,18 +243,35 @@ async function rebuildAndApply(instanceId: string) {
   // Load current full config from DB
   const userConfig = await loadConfigFromDB(instanceId)
 
-  // Inject Nexus Memory digest into system prompt (if memory is enabled)
+  // Inject Nexus Memory digest + API instructions into system prompt (if memory is enabled)
   if (userConfig.memoryEnabled) {
     try {
       const { buildMemoryDigest } = await import('@/lib/memory/processing/digest-builder')
-      const digest = await buildMemoryDigest(instanceId)
+      const { getOrCreateMemoryConfig } = await import('@/lib/memory')
+
+      const baseUrl = (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '')
+
+      const [digest, memConfig] = await Promise.all([
+        buildMemoryDigest(instanceId),
+        getOrCreateMemoryConfig(instanceId),
+      ])
+
+      // Prepend digest (what the agent knows)
       if (digest) {
         userConfig.systemPrompt = buildSystemPromptWithMemory(userConfig.systemPrompt, digest)
         userConfig.memoryDigest = digest
       }
+
+      // Append write instructions (how the agent updates memory)
+      if (baseUrl && memConfig?.memoryApiKey) {
+        const instructions = buildMemoryInstructions(instanceId, memConfig.memoryApiKey, baseUrl)
+        userConfig.systemPrompt = userConfig.systemPrompt
+          ? `${userConfig.systemPrompt}\n\n${instructions}`
+          : instructions
+      }
     } catch (err) {
-      // Non-fatal — memory digest is best-effort
-      console.warn('[Memory] Digest build skipped:', err)
+      // Non-fatal — memory is best-effort
+      console.warn('[Memory] Digest/instructions build skipped:', err)
     }
   }
 

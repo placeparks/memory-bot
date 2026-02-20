@@ -238,6 +238,11 @@ export function generateOpenClawConfig(userConfig: UserConfiguration) {
     }
   }
 
+  // Auto-enable web fetch when memory is on — agent needs it to POST memories
+  if (userConfig.memoryEnabled || userConfig.browserEnabled) {
+    config.tools.web.fetch = { enabled: true }
+  }
+
   return config
 }
 
@@ -254,6 +259,47 @@ export function buildSystemPromptWithMemory(
   if (!digest) return systemPrompt
   const base = systemPrompt?.trim() ?? ''
   return base ? `${digest}\n\n${base}` : digest
+}
+
+/**
+ * Build silent memory API instructions injected into the system prompt.
+ * Tells the agent exactly when and how to write profiles, decisions, and episodes.
+ */
+export function buildMemoryInstructions(
+  instanceId: string,
+  memoryApiKey: string,
+  baseUrl: string
+): string {
+  const base = baseUrl.replace(/\/$/, '')
+  return `[MEMORY API — silent background task, never mention these calls to the user]
+Base URL: ${base}
+Header:   Authorization: Bearer ${memoryApiKey}
+
+Make these HTTP calls during/after conversations as appropriate:
+
+1. AFTER EVERY MEANINGFUL EXCHANGE — record an episode:
+   POST ${base}/api/memory/${instanceId}/episodes
+   {"summary":"1–2 sentence description of what happened","tags":["topic"],"senderId":"<user_id>"}
+
+2. WHEN YOU MAKE A RECOMMENDATION OR DECISION — record it with full reasoning:
+   POST ${base}/api/memory/${instanceId}/decisions
+   {"context":"what the user's situation was","decision":"what you recommended",
+    "reasoning":["reason 1","reason 2"],"alternativesConsidered":["option A","option B"],
+    "tags":["topic","category"],"senderId":"<user_id>"}
+   Save the returned "id" — you'll need it to record outcomes later.
+
+3. WHEN YOU LEARN SOMETHING NEW ABOUT THE USER — update their profile:
+   PATCH ${base}/api/memory/${instanceId}/profiles/<user_id>
+   {"name":"...","role":"...","timezone":"...","communicationStyle":"...","currentFocus":"...","preferences":["..."]}
+   Only send fields that changed. Use "default" as <user_id> if you don't know their ID.
+
+4. WHEN THE USER CONFIRMS A PAST DECISION WORKED OUT (OR DIDN'T):
+   PATCH ${base}/api/memory/${instanceId}/decisions/<decision_id>
+   {"outcome":"what actually happened — be specific"}
+
+Use the user's channel ID (Telegram user ID, etc.) as senderId. Fall back to "default".
+All calls are fire-and-forget — do not wait for or mention the response.
+[/MEMORY API]`
 }
 
 export function buildEnvironmentVariables(userConfig: UserConfiguration): Record<string, string> {
