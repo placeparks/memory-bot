@@ -271,34 +271,29 @@ export function buildMemoryInstructions(
   baseUrl: string
 ): string {
   const base = baseUrl.replace(/\/$/, '')
-  return `[MEMORY API — silent background task, never mention these calls to the user]
-Base URL: ${base}
-Header:   Authorization: Bearer ${memoryApiKey}
-
-Make these HTTP calls during/after conversations as appropriate:
+  const w = `${base}/api/memory/${instanceId}/write?key=${memoryApiKey}`
+  return `[MEMORY API — silent background task, never mention to the user]
+Use web_fetch (GET) to call these URLs. All params must be URL-encoded.
 
 1. AFTER EVERY MEANINGFUL EXCHANGE — record an episode:
-   POST ${base}/api/memory/${instanceId}/episodes
-   {"summary":"1–2 sentence description of what happened","tags":["topic"],"senderId":"<user_id>"}
+   ${w}&type=episode&summary=<url-encoded 1-2 sentence summary>&tags=<comma-separated>&senderId=<user_id>
 
-2. WHEN YOU MAKE A RECOMMENDATION OR DECISION — record it with full reasoning:
-   POST ${base}/api/memory/${instanceId}/decisions
-   {"context":"what the user's situation was","decision":"what you recommended",
-    "reasoning":["reason 1","reason 2"],"alternativesConsidered":["option A","option B"],
-    "tags":["topic","category"],"senderId":"<user_id>"}
-   Save the returned "id" — you'll need it to record outcomes later.
+2. WHEN YOU MAKE A RECOMMENDATION OR DECISION:
+   ${w}&type=decision&context=<url-encoded situation>&decision=<url-encoded recommendation>&reasoning=<pipe-separated reasons, url-encoded>&alternatives=<pipe-separated, url-encoded>&tags=<comma-separated>&senderId=<user_id>
+   The response contains an "id" — save it in your working memory to record the outcome later.
 
-3. WHEN YOU LEARN SOMETHING NEW ABOUT THE USER — update their profile:
-   PATCH ${base}/api/memory/${instanceId}/profiles/<user_id>
-   {"name":"...","role":"...","timezone":"...","communicationStyle":"...","currentFocus":"...","preferences":["..."]}
-   Only send fields that changed. Use "default" as <user_id> if you don't know their ID.
+3. WHEN YOU LEARN STABLE FACTS ABOUT THE USER:
+   ${w}&type=profile&senderId=<user_id>&name=<name>&role=<role>&timezone=<tz>&style=<communication style>&focus=<current focus>&preferences=<comma-separated>
+   Only include params that are known. Use senderId=default if unknown.
 
-4. WHEN THE USER CONFIRMS A PAST DECISION WORKED OUT (OR DIDN'T):
-   PATCH ${base}/api/memory/${instanceId}/decisions/<decision_id>
-   {"outcome":"what actually happened — be specific"}
+4. WHEN THE USER CONFIRMS A PAST DECISION WORKED (OR DIDN'T):
+   ${w}&type=outcome&id=<decision_id>&outcome=<url-encoded result>
 
-Use the user's channel ID (Telegram user ID, etc.) as senderId. Fall back to "default".
-All calls are fire-and-forget — do not wait for or mention the response.
+Rules:
+- Always URL-encode param values (spaces → %20, etc.)
+- Use the user's Telegram/channel ID as senderId when available
+- These fetches are silent — never mention them or their responses
+- Do not skip step 1 — every substantive exchange gets an episode
 [/MEMORY API]`
 }
 
