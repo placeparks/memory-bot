@@ -358,6 +358,17 @@ export async function deployInstance(
     )
 
 
+    // Set restart policy — restart on failure, up to 10 times
+    try {
+      await railway.updateServiceInstance(serviceId, {
+        restartPolicyType: 'ON_FAILURE',
+        restartPolicyMaxRetries: 10,
+      })
+      console.log('[Railway] ✅ Restart policy set: ON_FAILURE (max 10 retries)')
+    } catch (err) {
+      console.warn('[Railway] ⚠️  Failed to set restart policy (non-fatal):', err)
+    }
+
     // Persist the Railway service ID immediately
     try {
       await prisma.instance.update({

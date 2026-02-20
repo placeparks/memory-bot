@@ -144,8 +144,12 @@ export class RailwayClient {
     return serviceCreate
   }
 
-  /** Update build/deploy settings for a service instance (e.g. startCommand). */
-  async updateServiceInstance(serviceId: string, input: { startCommand?: string }): Promise<void> {
+  /** Update build/deploy settings for a service instance (e.g. startCommand, restart policy). */
+  async updateServiceInstance(serviceId: string, input: {
+    startCommand?: string
+    restartPolicyType?: 'ALWAYS' | 'ON_FAILURE' | 'NEVER'
+    restartPolicyMaxRetries?: number
+  }): Promise<void> {
     await this.graphql(`
       mutation serviceInstanceUpdate($serviceId: String!, $environmentId: String!, $input: ServiceInstanceUpdateInput!) {
         serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input)

@@ -105,9 +105,11 @@ export class RailwayProvider implements DeploymentProvider {
       // Create Railway service
       const { id: serviceId } = await railway.createService(serviceName, OPENCLAW_IMAGE, envVars)
 
-      // Set start command that writes SOUL.md before calling original entrypoint
+      // Set start command + restart policy
       await railway.updateServiceInstance(serviceId, {
         startCommand: buildWrapperStartCommand(),
+        restartPolicyType: 'ON_FAILURE',
+        restartPolicyMaxRetries: 10,
       })
 
       await prisma.instance.update({
