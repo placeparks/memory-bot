@@ -239,6 +239,16 @@ export function generateOpenClawConfig(userConfig: UserConfiguration) {
     }
   }
 
+  // Canvas → tools.canvas
+  if (userConfig.canvasEnabled) {
+    config.tools.canvas = { enabled: true }
+  }
+
+  // Scheduled tasks → tools.cron
+  if (userConfig.cronEnabled) {
+    config.tools.cron = { enabled: true }
+  }
+
   // Auto-enable web fetch when memory is on — agent needs it to POST memories
   if (userConfig.memoryEnabled || userConfig.browserEnabled) {
     config.tools.web.fetch = { enabled: true }
