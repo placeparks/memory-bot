@@ -21,7 +21,10 @@ async function ensurePdfPolyfills() {
   if (pdfPolyfillsReady) return
   const g = globalThis as any
   if (!g.DOMMatrix || !g.Path2D || !g.ImageData) {
-    const canvas = await import('@napi-rs/canvas')
+    const { createRequire } = await import('node:module')
+    const require = createRequire(import.meta.url)
+    const modName = ['@napi-rs', 'canvas'].join('/')
+    const canvas = require(modName)
     g.DOMMatrix = g.DOMMatrix ?? canvas.DOMMatrix
     g.Path2D = g.Path2D ?? canvas.Path2D
     g.ImageData = g.ImageData ?? canvas.ImageData
