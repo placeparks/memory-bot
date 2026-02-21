@@ -12,17 +12,39 @@ export const dynamic = 'force-dynamic'
  *  ws://localhost:18789 inside the container.
  */
 function injectBridgeShim(html: string, accessUrl: string): string {
-  const wsProxyUrl = accessUrl.replace(/^https?:\/\//, 'wss://') + '/canvas-ws'
+  const base = accessUrl.replace(/^https?:\/\//, 'wss://')
+  // Try canvasHost (18793, simpler browser auth) first, fall back to gateway (18789, node auth)
+  const wsHost = base + '/canvas-ws-host'
+  const wsGateway = base + '/canvas-ws'
   const shim = `<script>
 (function(){
-  var PROXY='${wsProxyUrl}';
+  var HOSTS=['${wsHost}','${wsGateway}'];
   var _WS=window.WebSocket;
-  function ProxiedWS(url,proto){
-    console.log('[canvas-bridge] WS intercepted:',url,'→',PROXY);
-    return proto ? new _WS(PROXY,proto) : new _WS(PROXY);
+  var attempt=0;
+  function tryConnect(url,proto,resolve){
+    if(attempt>=HOSTS.length){resolve(new _WS(url,proto));return;}
+    var proxy=HOSTS[attempt++];
+    console.log('[canvas-bridge] trying',proxy);
+    var ws=proto?new _WS(proxy,proto):new _WS(proxy);
+    ws.addEventListener('open',function(){resolve(ws);});
+    ws.addEventListener('error',function(){tryConnect(url,proto,resolve);});
   }
-  ProxiedWS.CONNECTING=0; ProxiedWS.OPEN=1; ProxiedWS.CLOSING=2; ProxiedWS.CLOSED=3;
-  ProxiedWS.prototype=_WS.prototype;
+  function ProxiedWS(url,proto){
+    var handlers={open:[],close:[],message:[],error:[]};
+    var real=null;
+    var shell={};
+    ['addEventListener','removeEventListener'].forEach(function(m){shell[m]=function(t,h){(handlers[t]=handlers[t]||[]).push([m,h]);if(real)real[m](t,h);};});
+    ['send','close'].forEach(function(m){shell[m]=function(){if(real)real[m].apply(real,arguments);};});
+    ['readyState','protocol','bufferedAmount'].forEach(function(p){Object.defineProperty(shell,p,{get:function(){return real?real[p]:0;}});});
+    tryConnect(url,proto,function(ws){
+      real=ws;
+      Object.keys(handlers).forEach(function(t){handlers[t].forEach(function(pair){real[pair[0]](t,pair[1]);});});
+      shell.dispatchEvent=real.dispatchEvent.bind(real);
+    });
+    console.log('[canvas-bridge] intercepted WS:',url);
+    return shell;
+  }
+  ProxiedWS.CONNECTING=0;ProxiedWS.OPEN=1;ProxiedWS.CLOSING=2;ProxiedWS.CLOSED=3;
   window.WebSocket=ProxiedWS;
 })();
 </script>`

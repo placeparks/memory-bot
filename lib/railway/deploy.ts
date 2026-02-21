@@ -235,27 +235,35 @@ const handler = (req, res) => {
 
 const server = http.createServer(handler);
 
-// WebSocket tunnel — browser connects to /canvas-ws, we pipe to gateway ws://localhost:18789
+// WebSocket tunnel for canvas bridge.
+// /canvas-ws   → ws://localhost:18789 (gateway, requires node auth — legacy)
+// /canvas-ws-host → ws://localhost:18793 (canvasHost standalone — simpler browser auth)
 server.on('upgrade', function(req, socket, head) {
-  if (!req.url || !req.url.startsWith('/canvas-ws')) {
+  var url = req.url || '';
+  var targetPort;
+  if (url.startsWith('/canvas-ws-host')) {
+    targetPort = 18793;
+  } else if (url.startsWith('/canvas-ws')) {
+    targetPort = 18789;
+  } else {
     socket.write('HTTP/1.1 404 Not Found\\r\\n\\r\\n');
     socket.destroy();
     return;
   }
   var token = process.env.OPENCLAW_GATEWAY_TOKEN || '';
-  var gwSock = net.createConnection(18789, 'localhost');
+  var gwSock = net.createConnection(targetPort, 'localhost');
   gwSock.on('connect', function() {
-    var upgradeHeaders = [
+    var lines = [
       'GET / HTTP/1.1',
-      'Host: localhost:18789',
+      'Host: localhost:' + targetPort,
       'Upgrade: websocket',
       'Connection: Upgrade',
       'Sec-WebSocket-Key: ' + (req.headers['sec-websocket-key'] || 'dGhlIHNhbXBsZSBub25jZQ=='),
       'Sec-WebSocket-Version: ' + (req.headers['sec-websocket-version'] || '13'),
-      token ? 'Authorization: Bearer ' + token : '',
-      '', ''
-    ].filter(function(l) { return l !== undefined; }).join('\\r\\n');
-    gwSock.write(upgradeHeaders);
+    ];
+    if (token && targetPort === 18789) lines.push('Authorization: Bearer ' + token);
+    lines.push('', '');
+    gwSock.write(lines.join('\\r\\n'));
     if (head && head.length) gwSock.write(head);
     gwSock.pipe(socket);
     socket.pipe(gwSock);
