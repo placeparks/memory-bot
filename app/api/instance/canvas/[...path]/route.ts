@@ -18,33 +18,32 @@ function injectBridgeShim(html: string, accessUrl: string): string {
   const wsGateway = base + '/canvas-ws'
   const shim = `<script>
 (function(){
-  var HOSTS=['${wsHost}','${wsGateway}'];
+  var PROXY='${wsGateway}';
   var _WS=window.WebSocket;
-  var attempt=0;
-  function tryConnect(url,proto,resolve){
-    if(attempt>=HOSTS.length){resolve(new _WS(url,proto));return;}
-    var proxy=HOSTS[attempt++];
-    console.log('[canvas-bridge] trying',proxy);
-    var ws=proto?new _WS(proxy,proto):new _WS(proxy);
-    ws.addEventListener('open',function(){resolve(ws);});
-    ws.addEventListener('error',function(){tryConnect(url,proto,resolve);});
-  }
   function ProxiedWS(url,proto){
-    var handlers={open:[],close:[],message:[],error:[]};
-    var real=null;
-    var shell={};
-    ['addEventListener','removeEventListener'].forEach(function(m){shell[m]=function(t,h){(handlers[t]=handlers[t]||[]).push([m,h]);if(real)real[m](t,h);};});
-    ['send','close'].forEach(function(m){shell[m]=function(){if(real)real[m].apply(real,arguments);};});
-    ['readyState','protocol','bufferedAmount'].forEach(function(p){Object.defineProperty(shell,p,{get:function(){return real?real[p]:0;}});});
-    tryConnect(url,proto,function(ws){
-      real=ws;
-      Object.keys(handlers).forEach(function(t){handlers[t].forEach(function(pair){real[pair[0]](t,pair[1]);});});
-      shell.dispatchEvent=real.dispatchEvent.bind(real);
+    console.log('[canvas-bridge] WS intercepted url='+url+' proto='+proto);
+    var ws=proto?new _WS(PROXY,proto):new _WS(PROXY);
+    var origSend=ws.send.bind(ws);
+    ws.send=function(data){
+      console.log('[canvas-bridge] SEND type='+(typeof data)+' data='+
+        (data instanceof ArrayBuffer?'ArrayBuffer('+data.byteLength+')'
+        :data instanceof Blob?'Blob('+data.size+')'
+        :String(data)));
+      return origSend(data);
+    };
+    ws.addEventListener('message',function(e){
+      console.log('[canvas-bridge] RECV type='+(typeof e.data)+' data='+
+        (e.data instanceof ArrayBuffer?'ArrayBuffer('+e.data.byteLength+')'
+        :e.data instanceof Blob?'Blob('+e.data.size+')'
+        :String(e.data)));
     });
-    console.log('[canvas-bridge] intercepted WS:',url);
-    return shell;
+    ws.addEventListener('open',function(){console.log('[canvas-bridge] OPEN');});
+    ws.addEventListener('close',function(e){console.log('[canvas-bridge] CLOSE code='+e.code+' reason='+e.reason);});
+    ws.addEventListener('error',function(e){console.log('[canvas-bridge] ERROR',e);});
+    return ws;
   }
   ProxiedWS.CONNECTING=0;ProxiedWS.OPEN=1;ProxiedWS.CLOSING=2;ProxiedWS.CLOSED=3;
+  ProxiedWS.prototype=_WS.prototype;
   window.WebSocket=ProxiedWS;
 })();
 </script>`
