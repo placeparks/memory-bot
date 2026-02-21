@@ -18,6 +18,7 @@ const OPENCLAW_IMAGE = process.env.OPENCLAW_IMAGE || 'ghcr.io/placeparks/bot-saa
 // Runs on port 18800 inside the container alongside OpenClaw (port 18789).
 const PAIRING_SERVER_JS = `
 const http = require('http');
+const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -233,6 +234,38 @@ const handler = (req, res) => {
 };
 
 const server = http.createServer(handler);
+
+// WebSocket tunnel — browser connects to /canvas-ws, we pipe to gateway ws://localhost:18789
+server.on('upgrade', function(req, socket, head) {
+  if (!req.url || !req.url.startsWith('/canvas-ws')) {
+    socket.write('HTTP/1.1 404 Not Found\\r\\n\\r\\n');
+    socket.destroy();
+    return;
+  }
+  var token = process.env.OPENCLAW_GATEWAY_TOKEN || '';
+  var gwSock = net.createConnection(18789, 'localhost');
+  gwSock.on('connect', function() {
+    var upgradeHeaders = [
+      'GET / HTTP/1.1',
+      'Host: localhost:18789',
+      'Upgrade: websocket',
+      'Connection: Upgrade',
+      'Sec-WebSocket-Key: ' + (req.headers['sec-websocket-key'] || 'dGhlIHNhbXBsZSBub25jZQ=='),
+      'Sec-WebSocket-Version: ' + (req.headers['sec-websocket-version'] || '13'),
+      token ? 'Authorization: Bearer ' + token : '',
+      '', ''
+    ].filter(function(l) { return l !== undefined; }).join('\\r\\n');
+    gwSock.write(upgradeHeaders);
+    if (head && head.length) gwSock.write(head);
+    gwSock.pipe(socket);
+    socket.pipe(gwSock);
+  });
+  gwSock.on('error', function() { try { socket.destroy(); } catch(e) {} });
+  socket.on('error', function() { try { gwSock.destroy(); } catch(e) {} });
+  socket.on('close', function() { try { gwSock.destroy(); } catch(e) {} });
+  gwSock.on('close', function() { try { socket.destroy(); } catch(e) {} });
+});
+
 const PORT = parseInt(process.env.PORT || '18800', 10);
 
 // Primary listener (public PORT on Railway)
