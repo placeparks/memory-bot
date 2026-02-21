@@ -17,26 +17,33 @@ export async function GET(
 
   const user = await prisma.user.findUnique({
     where: { email: session.user.email },
-    include: { instance: true },
+    include: {
+      instance: {
+        include: { config: true },
+      },
+    },
   })
 
   if (!user?.instance?.serviceUrl) {
     return NextResponse.json({ error: 'No instance found' }, { status: 404 })
   }
 
-  let canvasBase: string
-  try {
-    const parsed = new URL(user.instance.serviceUrl)
-    parsed.port = '18793'
-    canvasBase = parsed.origin
-  } catch {
-    return NextResponse.json({ error: 'Invalid serviceUrl' }, { status: 500 })
-  }
-
+  const gatewayToken = user.instance.config?.gatewayToken ?? null
   const pathStr = (params.path ?? []).join('/')
 
+  // Canvas is served through the gateway at /__openclaw__/canvas/
+  // (canvasHost only binds to localhost inside the container)
+  const gatewayBase = user.instance.serviceUrl.replace(/\/$/, '')
+  const upstreamUrl = `${gatewayBase}/__openclaw__/canvas/${pathStr}`
+
   try {
-    const upstreamRes = await fetch(`${canvasBase}/${pathStr}`, {
+    const headers: Record<string, string> = {}
+    if (gatewayToken) {
+      headers['Authorization'] = `Bearer ${gatewayToken}`
+    }
+
+    const upstreamRes = await fetch(upstreamUrl, {
+      headers,
       signal: AbortSignal.timeout(10000),
     })
 
