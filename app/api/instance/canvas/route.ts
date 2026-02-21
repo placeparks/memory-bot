@@ -15,11 +15,7 @@ export async function GET() {
 
   const user = await prisma.user.findUnique({
     where: { email: session.user.email },
-    include: {
-      instance: {
-        include: { config: true },
-      },
-    },
+    include: { instance: true },
   })
 
   if (!user?.instance) {
@@ -30,18 +26,10 @@ export async function GET() {
   const canvasEnabled = config?.canvasEnabled ?? false
 
   let isRunning = false
-  if (canvasEnabled && user.instance.serviceUrl) {
-    const gatewayToken = user.instance.config?.gatewayToken ?? null
-    const gatewayBase = user.instance.serviceUrl.replace(/\/$/, '')
-
+  if (canvasEnabled && user.instance.accessUrl) {
+    const base = user.instance.accessUrl.replace(/\/$/, '')
     try {
-      const headers: Record<string, string> = {}
-      if (gatewayToken) {
-        headers['Authorization'] = `Bearer ${gatewayToken}`
-      }
-
-      const res = await fetch(`${gatewayBase}/__openclaw__/canvas/`, {
-        headers,
+      const res = await fetch(`${base}/canvas/__openclaw__/canvas/`, {
         signal: AbortSignal.timeout(3000),
       })
       isRunning = res.status < 500

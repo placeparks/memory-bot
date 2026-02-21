@@ -209,6 +209,25 @@ const handler = (req, res) => {
     });
   }
 
+  if (req.method === 'GET' && req.url && req.url.startsWith('/canvas')) {
+    var gatewayPath = req.url.slice('/canvas'.length) || '/';
+    var token = process.env.OPENCLAW_GATEWAY_TOKEN || '';
+    var gatewayReq = http.request({
+      hostname: 'localhost', port: 18789,
+      path: gatewayPath || '/', method: 'GET',
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+    }, function(gatewayRes) {
+      var ct = gatewayRes.headers['content-type'] || 'text/html';
+      res.writeHead(gatewayRes.statusCode, { 'Content-Type': ct });
+      gatewayRes.pipe(res);
+    });
+    gatewayReq.on('error', function(e) {
+      res.writeHead(503); res.end(JSON.stringify({ error: 'Canvas unreachable', detail: e.message }));
+    });
+    gatewayReq.end();
+    return;
+  }
+
   res.writeHead(404);
   res.end();
 };

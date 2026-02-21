@@ -17,33 +17,26 @@ export async function GET(
 
   const user = await prisma.user.findUnique({
     where: { email: session.user.email },
-    include: {
-      instance: {
-        include: { config: true },
-      },
-    },
+    include: { instance: true },
   })
 
-  if (!user?.instance?.serviceUrl) {
+  if (!user?.instance) {
     return NextResponse.json({ error: 'No instance found' }, { status: 404 })
   }
 
-  const gatewayToken = user.instance.config?.gatewayToken ?? null
-  const pathStr = (params.path ?? []).join('/')
+  const accessUrl = user.instance.accessUrl?.replace(/\/$/, '')
+  if (!accessUrl) {
+    return NextResponse.json({ error: 'No public URL for instance' }, { status: 503 })
+  }
 
-  // Canvas is served through the gateway at /__openclaw__/canvas/
-  // (canvasHost only binds to localhost inside the container)
-  const gatewayBase = user.instance.serviceUrl.replace(/\/$/, '')
-  const upstreamUrl = `${gatewayBase}/__openclaw__/canvas/${pathStr}`
+  // Route through the pairing server's /canvas proxy (port 18800, public).
+  // The pairing server forwards /canvas/* → localhost:18789/* (gateway).
+  // pathStr preserves the full path (e.g. __openclaw__/canvas/page.html).
+  const pathStr = (params.path ?? []).join('/')
+  const upstreamUrl = `${accessUrl}/canvas/${pathStr}`
 
   try {
-    const headers: Record<string, string> = {}
-    if (gatewayToken) {
-      headers['Authorization'] = `Bearer ${gatewayToken}`
-    }
-
     const upstreamRes = await fetch(upstreamUrl, {
-      headers,
       signal: AbortSignal.timeout(10000),
     })
 
