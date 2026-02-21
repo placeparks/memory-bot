@@ -239,14 +239,14 @@ export function generateOpenClawConfig(userConfig: UserConfiguration) {
     }
   }
 
-  // Canvas → tools.canvas
+  // Canvas → top-level canvasHost (not tools.canvas)
   if (userConfig.canvasEnabled) {
-    config.tools.canvas = { enabled: true }
+    config.canvasHost = { enabled: true, port: 18793 }
   }
 
-  // Scheduled tasks → tools.cron
+  // Scheduled tasks → top-level cron (not tools.cron)
   if (userConfig.cronEnabled) {
-    config.tools.cron = { enabled: true }
+    config.cron = { enabled: true }
   }
 
   // Auto-enable web fetch when memory is on — agent needs it to POST memories
